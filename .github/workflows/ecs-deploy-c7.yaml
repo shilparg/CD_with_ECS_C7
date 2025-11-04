@@ -21,21 +21,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Step 2: Configure AWS credentials
+      # Step 2: Install Terraform
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8 # or your preferred versions
+
+      # Step 3: Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           role-to-assume: arn:aws:iam::255945442255:role/GITHUB_OIDC_ROLE
           aws-region: us-east-1
 
-      # Step 3: Terraform Init & Apply
+      # Step 4: Terraform Init & Apply
       - name: Terraform Init & Apply
         run: |
           terraform init
-          terraform apply -auto-approve
+          terraform apply -auto-approve -var="image_tag=${GITHUB_SHA}"
           terraform output -json > tf_outputs.json
 
-      # Step 4: Export Terraform outputs to GitHub environment
+      # Step 5: Export Terraform outputs to GitHub environment
       - name: Export Terraform Outputs
         run: |
           echo "ECR_REPOSITORY=$(jq -r .ecr_repository.value tf_outputs.json)" >> $GITHUB_ENV
@@ -44,12 +50,12 @@ jobs:
           echo "CONTAINER_NAME=$(jq -r .container_name.value tf_outputs.json)" >> $GITHUB_ENV
           echo "TASK_DEF=$(jq -r .task_definition.value tf_outputs.json)" >> $GITHUB_ENV
 
-      # Step 5: Login to Amazon ECR
+      # Step 6: Login to Amazon ECR
       - name: Login to Amazon ECR
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v1
 
-      # Step 6: Build and push Docker image
+      # Step 7: Build and push Docker image
       - name: Build and push Docker image
         id: build-image
         uses: docker/build-push-action@v6
@@ -62,14 +68,14 @@ jobs:
           platforms: linux/amd64
           provenance: false
 
-      # Step 7: Download current task definition
+      # Step 8: Download current task definition
       - name: Download task definition
         run: |
           aws ecs describe-task-definition \
             --task-definition ${{ env.TASK_DEF }} \
             --query taskDefinition > task-definition.json
 
-      # Step 8: Save current revision for rollback
+      # Step 9: Save current task definition revision
       - name: Save current task definition revision
         id: save-current
         run: |
@@ -80,7 +86,7 @@ jobs:
             --output text)
           echo "CURRENT_REVISION=$CURRENT_REVISION" >> $GITHUB_ENV
 
-      # Step 9: Render new task definition
+      # Step 10: Render new task definition
       - name: Render new task definition
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
@@ -89,7 +95,7 @@ jobs:
           container-name: ${{ env.CONTAINER_NAME }}
           image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
 
-      # Step 10: Deploy new task definition
+      # Step 11: Deploy new task definition
       - name: Deploy ECS task definition
         id: deploy-new
         continue-on-error: true
@@ -100,7 +106,7 @@ jobs:
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
 
-      # Step 11: Rollback if deployment fails
+      # Step 12: Rollback if deployment fails
       - name: Rollback on failure
         if: steps.deploy-new.outcome == 'failure'
         run: |

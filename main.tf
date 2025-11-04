@@ -1,3 +1,6 @@
+########################################
+# Provider and Data Sources
+########################################
 provider "aws" {
   region = var.region
 }
@@ -5,6 +8,9 @@ provider "aws" {
 data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
+########################################
+# Variables
+########################################
 variable "prefix" {
   type    = string
   default = "shilpa"
@@ -15,15 +21,21 @@ variable "region" {
   default = "us-east-1"
 }
 
-# Reuse existing VPC by tag
+variable "image_tag" {
+  description = "Docker image tag for ECS container"
+  type        = string
+}
+
+########################################
+# VPC and Subnets (Reuse Existing)
+########################################
 data "aws_vpc" "existing" {
   filter {
     name   = "tag:Name"
-    values = ["ce11-tf-vpc-95"] # Change to match your VPC tag
+    values = ["cohort-11-vpc-vpc"] # Change to match your VPC tag
   }
 }
 
-# Reuse public subnets by tag
 data "aws_subnets" "public" {
   filter {
     name   = "vpc-id"
@@ -31,12 +43,14 @@ data "aws_subnets" "public" {
   }
 
   filter {
-    name   = "tag:Type"
-    values = ["public"] # Change to match your subnet tag
+    name   = "tag:Name"
+    values = ["*public*"] # Matches any subnet name containing 'public'
   }
 }
 
-# Create a new security group for ECS
+########################################
+# Security Group for ECS
+########################################
 resource "aws_security_group" "ecs_sg" {
   name        = "${var.prefix}-ecs-sg"
   description = "Allow HTTP traffic for ECS"
@@ -57,26 +71,22 @@ resource "aws_security_group" "ecs_sg" {
   }
 }
 
-# Create ECR repository
+########################################
+# ECR Repository
+########################################
 resource "aws_ecr_repository" "ecr" {
   name         = "${var.prefix}-ecr"
   force_delete = true
 }
 
-# ECS cluster and service
+########################################
+# ECS Cluster and Service
+########################################
 module "ecs" {
   source  = "terraform-aws-modules/ecs/aws"
-  version = "~> 5.9.0"
+  version = "~> 6.0"
 
   cluster_name = "${var.prefix}-ecs"
-
-  fargate_capacity_providers = {
-    FARGATE = {
-      default_capacity_provider_strategy = {
-        weight = 100
-      }
-    }
-  }
 
   services = {
     "${var.prefix}-ecs-task-def" = {
@@ -86,7 +96,7 @@ module "ecs" {
       container_definitions = {
         "${var.prefix}-container" = {
           essential = true
-          image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.name}.amazonaws.com/${var.prefix}-ecr:latest"
+          image     = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${data.aws_region.current.id}.amazonaws.com/${var.prefix}-ecr:${var.image_tag}"
           port_mappings = [
             {
               containerPort = 8080
@@ -103,5 +113,4 @@ module "ecs" {
     }
   }
 }
-
 
