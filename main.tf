@@ -32,7 +32,7 @@ variable "image_tag" {
 data "aws_vpc" "existing" {
   filter {
     name   = "tag:Name"
-    values = ["ce11-tf-vpc-95"] # Change to match your VPC tag
+    values = ["cohort-11-vpc-vpc"] # Change to match your VPC tag
   }
 }
 
