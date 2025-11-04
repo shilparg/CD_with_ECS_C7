@@ -43,8 +43,8 @@ data "aws_subnets" "public" {
   }
 
   filter {
-    name   = "tag:Type"
-    values = ["public"] # Change to match your subnet tag
+    name   = "tag:Name"
+    values = ["*public*"] # Matches any subnet name containing 'public'
   }
 }
 
